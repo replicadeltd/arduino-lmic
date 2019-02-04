@@ -1596,7 +1596,7 @@ bit_t LMIC_startJoining (void) {
         os_setCallback(&LMIC.osjob, FUNC_ADDR(startJoining));
         return 1;
     }
-    return 0; // already joined
+    return 1; // already joined
 }
 #endif // !DISABLE_JOIN
 
