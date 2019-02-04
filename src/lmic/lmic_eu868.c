@@ -221,9 +221,9 @@ LMICeu868_txDoneFSK(ostime_t delay, osjobcb_t func) {
         os_setTimedCallback(&LMIC.osjob, LMIC.rxtime - RX_RAMPUP, func);
 }
 
-void
+int
 LMICeu868_initJoinLoop(void) {
-        LMICeulike_initJoinLoop(NUM_DEFAULT_CHANNELS, /* adr dBm */ EU868_TX_EIRP_MAX_DBM);
+        return LMICeulike_initJoinLoop(NUM_DEFAULT_CHANNELS, /* adr dBm */ EU868_TX_EIRP_MAX_DBM);
 }
 
 //

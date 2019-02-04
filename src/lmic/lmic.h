@@ -433,14 +433,14 @@ bit_t LMIC_startJoining (void);
 void  LMIC_shutdown     (void);
 void  LMIC_init         (void);
 void  LMIC_reset        (void);
-void  LMIC_clrTxData    (void);
-void  LMIC_setTxData    (void);
+int   LMIC_clrTxData    (void);
+int   LMIC_setTxData    (void);
 int   LMIC_setTxData2   (u1_t port, xref2u1_t data, u1_t dlen, u1_t confirmed);
-void  LMIC_sendAlive    (void);
+int   LMIC_sendAlive    (void);
 
 #if !defined(DISABLE_BEACONS)
 bit_t LMIC_enableTracking  (u1_t tryBcnInfo);
-void  LMIC_disableTracking (void);
+int   LMIC_disableTracking (void);
 #endif
 
 #if !defined(DISABLE_PING)
@@ -448,7 +448,7 @@ void  LMIC_stopPingable  (void);
 void  LMIC_setPingable   (u1_t intvExp);
 #endif
 #if !defined(DISABLE_JOIN)
-void  LMIC_tryRejoin     (void);
+int   LMIC_tryRejoin     (void);
 #endif
 
 void LMIC_setSession (u4_t netid, devaddr_t devaddr, xref2u1_t nwkKey, xref2u1_t artKey);

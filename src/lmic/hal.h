@@ -85,7 +85,7 @@ void hal_disableIRQs (void);
 /*
  * enable CPU interrupts.
  */
-void hal_enableIRQs (void);
+int hal_enableIRQs (void);
 
 /*
  * put system and CPU in low-power mode, sleep until interrupt.

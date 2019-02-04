@@ -353,7 +353,7 @@ static void opmodeFSK() {
 }
 
 // configure LoRa modem (cfg1, cfg2)
-static void configLoraModem () {
+static int configLoraModem () {
     sf_t sf = getSf(LMIC.rps);
 
 #ifdef CFG_sx1276_radio
@@ -430,6 +430,7 @@ static void configLoraModem () {
 #else
 #error Missing CFG_sx1272_radio/CFG_sx1276_radio
 #endif /* CFG_sx1272_radio */
+        return 1;
 }
 
 static void configChannel () {
@@ -473,7 +474,7 @@ static void configPower () {
 #endif /* CFG_sx1272_radio */
 }
 
-static void txfsk () {
+static int txfsk () {
     // select FSK modem (from sleep mode)
     writeOpmode(0x10); // FSK, BT=0.5
     ASSERT(readReg(RegOpMode) == 0x10);
@@ -514,9 +515,11 @@ static void txfsk () {
 
     // now we actually start the transmission
     opmode(OPMODE_TX);
+
+    return 1;
 }
 
-static void txlora () {
+static int txlora () {
     // select LoRa modem (from sleep mode)
     //writeReg(RegOpMode, OPMODE_LORA);
     opmodeLora();
@@ -525,7 +528,7 @@ static void txlora () {
     // enter standby mode (required for FIFO loading))
     opmode(OPMODE_STANDBY);
     // configure LoRa modem (cfg1, cfg2)
-    configLoraModem();
+    if ( !configLoraModem() ) { return 0; }
     // configure frequency
     configChannel();
     // configure output power
@@ -566,10 +569,14 @@ static void txlora () {
            getIh(LMIC.rps)
    );
 #endif
+
+    return 1;
 }
 
 // start transmitter (buf=LMIC.frame, len=LMIC.dataLen)
-static void starttx () {
+static int starttx () {
+
+    int rv = 0;
     u1_t const rOpMode = readReg(RegOpMode);
 
     // originally, this code ASSERT()ed, but asserts are both bad and
@@ -593,17 +600,19 @@ static void starttx () {
         if (rssi.max_rssi >= LMIC.lbt_dbmax) {
             // complete the request by scheduling the job
             os_setCallback(&LMIC.osjob, LMIC.osjob.func);
-            return;
+            return 1;
         }
     }
 
     if(getSf(LMIC.rps) == FSK) { // FSK modem
-        txfsk();
+        rv = txfsk();
     } else { // LoRa modem
-        txlora();
+        rv = txlora();
     }
     // the radio will go back to STANDBY mode as soon as the TX is finished
     // the corresponding IRQ will inform us about completion.
+
+    return rv;
 }
 
 enum { RXMODE_SINGLE, RXMODE_SCAN, RXMODE_RSSI };
@@ -615,7 +624,9 @@ static CONST_TABLE(u1_t, rxlorairqmask)[] = {
 };
 
 // start LoRa receiver (time=LMIC.rxtime, timeout=LMIC.rxsyms, result=LMIC.frame[LMIC.dataLen])
-static void rxlora (u1_t rxmode) {
+static int rxlora (u1_t rxmode) {
+    int rv = 1;
+
     // select LoRa modem (from sleep mode)
     opmodeLora();
     ASSERT((readReg(RegOpMode) & OPMODE_LORA) != 0);
@@ -689,9 +700,11 @@ static void rxlora (u1_t rxmode) {
        );
     }
 #endif
+
+    return rv;
 }
 
-static void rxfsk (u1_t rxmode) {
+static int rxfsk (u1_t rxmode) {
     // only single rx (no continuous scanning, no noise sampling)
     ASSERT( rxmode == RXMODE_SINGLE );
     // select FSK modem (from sleep mode)
@@ -740,17 +753,22 @@ static void rxfsk (u1_t rxmode) {
     // now instruct the radio to receive
     hal_waitUntil(LMIC.rxtime); // busy wait until exact rx time
     opmode(OPMODE_RX); // no single rx mode available in FSK
+
+    return 1;
 }
 
-static void startrx (u1_t rxmode) {
+static int startrx (u1_t rxmode) {
+    int rv = 0;
     ASSERT( (readReg(RegOpMode) & OPMODE_MASK) == OPMODE_SLEEP );
     if(getSf(LMIC.rps) == FSK) { // FSK modem
-        rxfsk(rxmode);
+        rv = rxfsk(rxmode);
     } else { // LoRa modem
-        rxlora(rxmode);
+        rv = rxlora(rxmode);
     }
     // the radio will go back to STANDBY mode as soon as the RX is finished
     // or timed out, and the corresponding IRQ will inform us about completion.
+
+    return rv;
 }
 
 // get random seed from wideband noise rssi
@@ -819,8 +837,7 @@ int radio_init () {
 
     opmode(OPMODE_SLEEP);
 
-    hal_enableIRQs();
-    return 1;
+    return hal_enableIRQs();
 }
 
 // return next random byte derived from seed buffer
@@ -840,7 +857,7 @@ u1_t radio_rand1 () {
 u1_t radio_rssi () {
     hal_disableIRQs();
     u1_t r = readReg(LORARegRssiValue);
-    hal_enableIRQs();
+    if ( !hal_enableIRQs() ) { return 0; }
     return r;
 }
 
@@ -851,7 +868,8 @@ u1_t radio_rssi () {
 //
 // RSSI returned is expressed in units of dB, and is offset according to the
 // current radio setting per section 5.5.5 of Semtech 1276 datasheet.
-void radio_monitor_rssi(ostime_t nTicks, oslmic_radio_rssi_t *pRssi) {
+int radio_monitor_rssi(ostime_t nTicks, oslmic_radio_rssi_t *pRssi) {
+
     uint8_t rssiMax, rssiMin;
     uint16_t rssiSum;
     uint16_t rssiN;
@@ -860,7 +878,7 @@ void radio_monitor_rssi(ostime_t nTicks, oslmic_radio_rssi_t *pRssi) {
     ostime_t tBegin;
     int notDone;
 
-    rxlora(RXMODE_SCAN);
+    if ( !rxlora(RXMODE_SCAN) ) { return 0; }
 
     // while we're waiting for the PLLs to spin up, determine which
     // band we're in and choose the base RSSI.
@@ -904,7 +922,7 @@ void radio_monitor_rssi(ostime_t nTicks, oslmic_radio_rssi_t *pRssi) {
         rssiSum += rssiNow;
         ++rssiN;
 	// TODO(tmm@mcci.com) move this to os_getTime().
-        hal_enableIRQs();
+        if ( !hal_enableIRQs() ) { hal_disableIRQs(); opmode(OPMODE_SLEEP); return 0; }
         now = os_getTime();
         hal_disableIRQs();
         notDone = now - (tBegin + nTicks) < 0;
@@ -918,6 +936,8 @@ void radio_monitor_rssi(ostime_t nTicks, oslmic_radio_rssi_t *pRssi) {
     pRssi->min_rssi = (s2_t) (rssiMin + rssiAdjust);
     pRssi->mean_rssi = (s2_t) (rssiAdjust + ((rssiSum + (rssiN >> 1)) / rssiN));
     pRssi->n_rssi = rssiN;
+
+    return 1;
 }
 
 static CONST_TABLE(u2_t, LORA_RXDONE_FIXUP)[] = {
@@ -932,11 +952,14 @@ static CONST_TABLE(u2_t, LORA_RXDONE_FIXUP)[] = {
 
 // called by hal ext IRQ handler
 // (radio goes to stanby mode after tx/rx operations)
-void radio_irq_handler (u1_t dio) {
-    radio_irq_handler_v2(dio, os_getTime());
+int radio_irq_handler (u1_t dio) {
+    return radio_irq_handler_v2(dio, os_getTime());
 }
 
-void radio_irq_handler_v2 (u1_t dio, ostime_t now) {
+int radio_irq_handler_v2 (u1_t dio, ostime_t now) {
+
+    int rv = 1;
+
     LMIC_API_PARAMETER(dio);
 
 #if CFG_TxContinuousMode
@@ -950,7 +973,7 @@ void radio_irq_handler_v2 (u1_t dio, ostime_t now) {
     u1_t s = readReg(RegOpMode);
     u1_t c = readReg(LORARegModemConfig2);
     opmode(OPMODE_TX);
-    return;
+    return rv;
 #else /* ! CFG_TxContinuousMode */
 
 #if LMIC_DEBUG_LEVEL > 0
@@ -1019,11 +1042,14 @@ void radio_irq_handler_v2 (u1_t dio, ostime_t now) {
     // go from stanby to sleep
     opmode(OPMODE_SLEEP);
     // run os job (use preset func ptr)
-    os_setCallback(&LMIC.osjob, LMIC.osjob.func);
+    rv = os_setCallback(&LMIC.osjob, LMIC.osjob.func);
 #endif /* ! CFG_TxContinuousMode */
+
+    return rv;
 }
 
-void os_radio (u1_t mode) {
+int os_radio (u1_t mode) {
+    int rv = 0;
     hal_disableIRQs();
     switch (mode) {
       case RADIO_RST:
@@ -1033,18 +1059,20 @@ void os_radio (u1_t mode) {
 
       case RADIO_TX:
         // transmit frame now
-        starttx(); // buf=LMIC.frame, len=LMIC.dataLen
+        rv = starttx(); // buf=LMIC.frame, len=LMIC.dataLen
         break;
 
       case RADIO_RX:
         // receive frame now (exactly at rxtime)
-        startrx(RXMODE_SINGLE); // buf=LMIC.frame, time=LMIC.rxtime, timeout=LMIC.rxsyms
+        rv = startrx(RXMODE_SINGLE); // buf=LMIC.frame, time=LMIC.rxtime, timeout=LMIC.rxsyms
         break;
 
       case RADIO_RXON:
         // start scanning for beacon now
-        startrx(RXMODE_SCAN); // buf=LMIC.frame
+        rv = startrx(RXMODE_SCAN); // buf=LMIC.frame
         break;
     }
-    hal_enableIRQs();
+    if ( !hal_enableIRQs() ) { return 0; }
+
+    return rv;
 }

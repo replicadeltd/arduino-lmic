@@ -73,7 +73,7 @@ void LMICeu868_setBcnRxParams(void);
 u4_t LMICeu868_convFreq(xref2cu1_t ptr);
 #define LMICbandplan_convFreq(ptr)      LMICeu868_convFreq(ptr)
 
-void LMICeu868_initJoinLoop(void);
+int LMICeu868_initJoinLoop(void);
 #define LMICbandplan_initJoinLoop()     LMICeu868_initJoinLoop()
 
 ostime_t LMICeu868_nextTx(ostime_t now);

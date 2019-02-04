@@ -52,7 +52,7 @@ LMIC_BEGIN_DECLS
 #define EV(a,b,c) /**/
 #define DO_DEVDB(field1,field2) /**/
 #if !defined(CFG_noassert)
-#define ASSERT(cond) if(!(cond)) hal_failed(__FILE__, __LINE__)
+#define ASSERT(cond) if(!(cond)) { hal_failed(__FILE__, __LINE__); return 0; }
 #else
 #define ASSERT(cond) /**/
 #endif
@@ -109,14 +109,14 @@ struct oslmic_radio_rssi_s {
 };
 
 int radio_init (void);
-void radio_irq_handler (u1_t dio);
-void radio_irq_handler_v2 (u1_t dio, ostime_t tref);
-void os_init (void);
+int radio_irq_handler (u1_t dio);
+int radio_irq_handler_v2 (u1_t dio, ostime_t tref);
+int os_init (void);
 int os_init_ex (const void *pPinMap);
-void os_runloop (void);
-void os_runloop_once (void);
+int os_runloop (void);
+int os_runloop_once (void);
 u1_t radio_rssi (void);
-void radio_monitor_rssi(ostime_t n, oslmic_radio_rssi_t *pRssi);
+int radio_monitor_rssi(ostime_t n, oslmic_radio_rssi_t *pRssi);
 
 //================================================================================
 
@@ -149,7 +149,7 @@ void radio_monitor_rssi(ostime_t n, oslmic_radio_rssi_t *pRssi);
 
 
 struct osjob_t;  // fwd decl.
-typedef void (*osjobcb_t) (struct osjob_t*);
+typedef int (*osjobcb_t) (struct osjob_t*);
 struct osjob_t {
     struct osjob_t* next;
     ostime_t deadline;
@@ -170,13 +170,13 @@ void os_getArtEui (xref2u1_t buf);
 void os_getDevEui (xref2u1_t buf);
 #endif
 #ifndef os_setCallback
-void os_setCallback (xref2osjob_t job, osjobcb_t cb);
+int os_setCallback (xref2osjob_t job, osjobcb_t cb);
 #endif
 #ifndef os_setTimedCallback
-void os_setTimedCallback (xref2osjob_t job, ostime_t time, osjobcb_t cb);
+int os_setTimedCallback (xref2osjob_t job, ostime_t time, osjobcb_t cb);
 #endif
 #ifndef os_clearCallback
-void os_clearCallback (xref2osjob_t job);
+int os_clearCallback (xref2osjob_t job);
 #endif
 #ifndef os_getTime
 ostime_t os_getTime (void);
@@ -185,7 +185,7 @@ ostime_t os_getTime (void);
 uint os_getTimeSecs (void);
 #endif
 #ifndef os_radio
-void os_radio (u1_t mode);
+int os_radio (u1_t mode);
 #endif
 #ifndef os_getBattLevel
 u1_t os_getBattLevel (void);

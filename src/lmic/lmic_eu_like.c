@@ -64,7 +64,7 @@ u1_t LMICeulike_mapChannels(u1_t chpage, u2_t chmap) {
 }
 
 #if !defined(DISABLE_JOIN)
-void LMICeulike_initJoinLoop(uint8_t nDefaultChannels, s1_t adrTxPow) {
+int LMICeulike_initJoinLoop(uint8_t nDefaultChannels, s1_t adrTxPow) {
 #if CFG_TxContinuousMode
         LMIC.txChnl = 0
 #else
@@ -77,6 +77,7 @@ void LMICeulike_initJoinLoop(uint8_t nDefaultChannels, s1_t adrTxPow) {
         LMICbandplan_initDefaultChannels(/* put into join mode */ 1);
         ASSERT((LMIC.opmode & OP_NEXTCHNL) == 0);
         LMIC.txend = os_getTime() + LMICcore_rndDelay(8);
+        return 1;
 }
 #endif // DISABLE_JOIN
 

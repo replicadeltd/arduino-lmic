@@ -47,9 +47,9 @@ int os_init_ex (const void *pintable) {
     return 1;
 }
 
-void os_init() {
+int os_init() {
     if (os_init_ex((const void *)&lmic_pins))
-        return;
+        return 1;
     ASSERT(0);
 }
 
@@ -69,18 +69,18 @@ static int unlinkjob (osjob_t** pnext, osjob_t* job) {
 }
 
 // clear scheduled job
-void os_clearCallback (osjob_t* job) {
+int os_clearCallback (osjob_t* job) {
     hal_disableIRQs();
 
     // if it's not in the scheduled jobs, look in the runnable...
     if (! unlinkjob(&OS.scheduledjobs, job))
         unlinkjob(&OS.runnablejobs, job);
 
-    hal_enableIRQs();
+    return hal_enableIRQs();
 }
 
 // schedule immediately runnable job
-void os_setCallback (osjob_t* job, osjobcb_t cb) {
+int os_setCallback (osjob_t* job, osjobcb_t cb) {
     osjob_t** pnext;
     hal_disableIRQs();
     // remove if job was already queued
@@ -91,11 +91,11 @@ void os_setCallback (osjob_t* job, osjobcb_t cb) {
     // add to end of run queue
     for(pnext=&OS.runnablejobs; *pnext; pnext=&((*pnext)->next));
     *pnext = job;
-    hal_enableIRQs();
+    return hal_enableIRQs();
 }
 
 // schedule timed job
-void os_setTimedCallback (osjob_t* job, ostime_t time, osjobcb_t cb) {
+int os_setTimedCallback (osjob_t* job, ostime_t time, osjobcb_t cb) {
     osjob_t** pnext;
     hal_disableIRQs();
     // remove if job was already queued
@@ -113,17 +113,17 @@ void os_setTimedCallback (osjob_t* job, ostime_t time, osjobcb_t cb) {
         }
     }
     *pnext = job;
-    hal_enableIRQs();
+    return hal_enableIRQs();
 }
 
 // execute jobs from timer and from run queue
-void os_runloop () {
+int os_runloop () {
     while(1) {
-        os_runloop_once();
+        if ( !os_runloop_once() ) { return 0; }
     }
 }
 
-void os_runloop_once() {
+int os_runloop_once() {
     osjob_t* j = NULL;
     hal_disableIRQs();
     // check for runnable jobs
@@ -136,7 +136,7 @@ void os_runloop_once() {
     } else { // nothing pending
         hal_sleep(); // wake by irq (timer already restarted)
     }
-    hal_enableIRQs();
+    return hal_enableIRQs();
     if(j) { // run job callback
         j->func(j);
     }

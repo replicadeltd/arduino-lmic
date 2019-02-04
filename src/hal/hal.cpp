@@ -28,7 +28,7 @@ static Arduino_LMIC::HalConfiguration_t nullHalConig;
 
 static void hal_interrupt_init(); // Fwd declaration
 
-static void hal_io_init () {
+static int hal_io_init () {
     // NSS and DIO0 are required, DIO1 is required for LoRa, DIO2 for FSK
     ASSERT(plmic_pins->nss != LMIC_UNUSED_PIN);
     ASSERT(plmic_pins->dio[0] != LMIC_UNUSED_PIN);
@@ -55,6 +55,8 @@ static void hal_io_init () {
     }
 
     hal_interrupt_init();
+
+    return 1;
 }
 
 // val == 1  => tx
@@ -90,7 +92,8 @@ static void hal_interrupt_init() {
 }
 
 static bool dio_states[NUM_DIO] = {0};
-static void hal_io_check() {
+static int hal_io_check() {
+    int rv = 1;
     uint8_t i;
     for (i = 0; i < NUM_DIO; ++i) {
         if (plmic_pins->dio[i] == LMIC_UNUSED_PIN)
@@ -99,9 +102,10 @@ static void hal_io_check() {
         if (dio_states[i] != digitalRead(plmic_pins->dio[i])) {
             dio_states[i] = !dio_states[i];
             if (dio_states[i])
-                radio_irq_handler(i);
+                if ( !radio_irq_handler(i) ) { rv = 0; }
         }
     }
+    return rv;
 }
 
 #else
@@ -133,7 +137,8 @@ static void hal_interrupt_init() {
   }
 }
 
-static void hal_io_check() {
+static int hal_io_check() {
+    int rv = 1;
     uint8_t i;
     for (i = 0; i < NUM_DIO; ++i) {
         ostime_t iTime;
@@ -143,9 +148,10 @@ static void hal_io_check() {
         iTime = interrupt_time[i];
         if (iTime) {
             interrupt_time[i] = 0;
-            radio_irq_handler_v2(i, iTime);
+            if ( !radio_irq_handler_v2(i, iTime) ) { rv = 0; }
         }
     }
+    return rv;
 }
 #endif // LMIC_USE_INTERRUPTS
 
@@ -271,7 +277,8 @@ void hal_disableIRQs () {
     irqlevel++;
 }
 
-void hal_enableIRQs () {
+int hal_enableIRQs () {
+    int rv = 1;
     if(--irqlevel == 0) {
         interrupts();
 
@@ -283,8 +290,9 @@ void hal_enableIRQs () {
         //
         // As an additional bonus, this prevents the can of worms that
         // we would otherwise get for running SPI transfers inside ISRs
-        hal_io_check();
+        if ( !hal_io_check() ) { rv = 0; }
     }
+    return rv;
 }
 
 void hal_sleep () {
@@ -370,7 +378,7 @@ bool hal_init_with_pinmap(const HalPinmap_t *pPinmap)
     pHalConfig->begin();
 
     // configure radio I/O and interrupt handler
-    hal_io_init();
+    if ( !hal_io_init() ) { return false; }
     // configure radio SPI
     hal_spi_init();
     // configure timer and interrupt handler
@@ -393,7 +401,9 @@ void hal_failed (const char *file, u2_t line) {
     LMIC_FAILURE_TO.flush();
 #endif
     hal_disableIRQs();
+#ifdef HAL_FAILED_FATAL
     while(1);
+#endif
 }
 
 ostime_t hal_setModuleActive (bit_t val) {
