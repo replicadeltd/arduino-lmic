@@ -12,6 +12,9 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#ifdef ARDUINO_ARCH_AVR
+#include <avr/wdt.h>
+#endif
 // include all the lmic header files, including ../lmic/hal.h
 #include "../lmic.h"
 // include the C++ hal.h
@@ -393,6 +396,12 @@ void hal_failed (const char *file, u2_t line) {
     LMIC_FAILURE_TO.flush();
 #endif
     hal_disableIRQs();
+#ifdef ARDUINO_ARCH_AVR
+#ifdef HAL_FAILED_WATCHDOG
+    wdt_reset();
+    wdt_enable( WDTO_1S );
+#endif
+#endif
     while(1);
 }
 
